@@ -591,25 +591,65 @@ function TabGrupos(props){
 
 function TabBracket(props){
   var matches=props.matches,bracket=props.bracket,setBracket=props.setBracket,isAdmin=props.isAdmin,c=props.c,toast2=props.toast2,setMatches=props.setMatches;
+  var pd1=useState({});var matchTimes=pd1[0];var setMatchTimes=pd1[1];
+  var pd2=useState(false);var apiLoading=pd2[0];var setApiLoading=pd2[1];
   var aCard={background:c.card,borderRadius:16,padding:16,marginBottom:16,border:"1px solid "+c.border};
   var inp={padding:"7px 8px",borderRadius:9,border:"1px solid "+c.border,background:c.inputBg,color:c.ink,fontSize:13,fontFamily:"'Outfit',sans-serif",width:"100%"};
   var btn={width:"100%",padding:14,fontSize:15,fontWeight:700,borderRadius:13,border:"none",background:"linear-gradient(135deg,"+GOLD+",#e0aa3c)",color:"#0a1f17",cursor:"pointer",marginTop:14,fontFamily:"'Outfit',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6};
+  var smInp={padding:"4px 6px",borderRadius:7,border:"1px solid "+c.border,background:c.inputBg,color:c.ink,fontSize:11,fontFamily:"'Outfit',sans-serif"};
   var upd=function(pos,val){var nb=Object.assign({},bracket);nb[pos]=val;setBracket(nb);DB.set(K.br,nb);};
+  var fetchSchedule=async function(){
+    setApiLoading(true);
+    try{
+      var res=await fetch("https://v3.football.api-sports.io/fixtures?league=1&season=2026",{headers:{"x-apisports-key":"95ea5f8bce0ce8bdeba48f077d4751e9"}});
+      var data=await res.json();
+      if(data.errors&&(data.errors.requests||data.errors.rateLimit)){toast2("⚠️ Límite diario de la API");setApiLoading(false);return;}
+      var fixtures=data.response||[];
+      if(!fixtures.length){toast2("Sin datos de la API aún");setApiLoading(false);return;}
+      var GROUP_END=Date.UTC(2026,5,28,0,0);
+      var ko=fixtures.filter(function(f){return f.fixture&&f.fixture.date&&new Date(f.fixture.date).getTime()>=GROUP_END;});
+      ko.sort(function(a,b){return new Date(a.fixture.date).getTime()-new Date(b.fixture.date).getTime();});
+      var r32=ko.filter(function(f){var r=((f.league&&f.league.round)||"").toLowerCase();return r.includes("32")||r.includes("1/16");});
+      if(!r32.length)r32=ko.slice(0,Math.min(16,ko.length));
+      var nm={};
+      r32.forEach(function(f,i){
+        var d=new Date(f.fixture.date);
+        var dateStr=d.getUTCFullYear()+"-"+String(d.getUTCMonth()+1).padStart(2,"0")+"-"+String(d.getUTCDate()).padStart(2,"0");
+        var timeStr=String(d.getUTCHours()).padStart(2,"0")+":"+String(d.getUTCMinutes()).padStart(2,"0");
+        var homeEs=mapName((f.teams&&f.teams.home&&f.teams.home.name)||"");
+        var awayEs=mapName((f.teams&&f.teams.away&&f.teams.away.name)||"");
+        nm[i]={date:dateStr,time:timeStr,homeApi:homeEs,awayApi:awayEs};
+      });
+      setMatchTimes(nm);
+      toast2("✓ "+Object.keys(nm).length+" horarios cargados");
+    }catch(e){console.error(e);toast2("Error al conectar con la API");}
+    setApiLoading(false);
+  };
   return h("div",{className:"fade"},
-    h("p",{style:{fontSize:13,color:c.muted,marginBottom:14}},(isAdmin?"Elige los clasificados.":"El organizador rellenará los cruces.")),
+    h("p",{style:{fontSize:13,color:c.muted,marginBottom:10}},(isAdmin?"Elige los clasificados y la fecha de cada cruce.":"El organizador rellenará los cruces.")),
+    isAdmin&&h("button",{style:{display:"flex",alignItems:"center",justifyContent:"center",gap:6,width:"100%",padding:"10px 14px",borderRadius:12,border:"1px solid "+c.border,background:c.subBg,color:c.ink,fontWeight:700,fontSize:13,cursor:"pointer",marginBottom:14,fontFamily:"'Outfit',sans-serif",opacity:apiLoading?0.6:1},onClick:apiLoading?undefined:fetchSchedule,disabled:apiLoading},apiLoading?"⏳ Cargando horarios...":h(Fragment,null,I.sync," Obtener horarios de la API")),
     h("div",{style:aCard},h("h3",{style:{margin:"0 0 14px",fontSize:15,fontFamily:"'Anton',sans-serif",color:c.ink}},"Octavos de final"),
       OCTAVOS.map(function(pair,i){
         var p1=pair[0];var p2=pair[1];var e1=bracket[p1]||"";var e2=bracket[p2]||"";
         var g1=p1.slice(-1);var g2=p2.slice(-1);var r1=p1[0];var r2=p2[0];
         var t1=r1==="M"||r1==="N"||r1==="O"||r1==="P";var t2=r2==="M"||r2==="N"||r2==="O"||r2==="P";
-        return h("div",{key:i,style:{display:"flex",alignItems:"center",gap:8,padding:"10px 0",borderBottom:"1px solid "+c.border}},
-          h("div",{style:{flex:1,textAlign:"center"}},h("div",{style:{fontSize:10,color:c.muted,marginBottom:4,fontWeight:700}},t1?"3er":""+r1+"º "+g1),isAdmin?h("select",{style:inp,value:e1,onChange:function(e){upd(p1,e.target.value);}},h("option",{value:""},"– Elegir –"),(GRUPOS[g1]||[]).map(function(eq){return h("option",{key:eq,value:eq},fl(eq)+" "+eq);})):h("div",{style:{fontSize:14,fontWeight:700,color:e1?c.ink:c.muted,padding:"6px 0"}},e1?fl(e1)+" "+e1:"Por decidir")),
-          h("div",{style:{fontSize:14,fontWeight:800,color:c.muted,flexShrink:0}},"VS"),
-          h("div",{style:{flex:1,textAlign:"center"}},h("div",{style:{fontSize:10,color:c.muted,marginBottom:4,fontWeight:700}},t2?"3er":""+r2+"º "+g2),isAdmin?h("select",{style:inp,value:e2,onChange:function(e){upd(p2,e.target.value);}},h("option",{value:""},"– Elegir –"),(GRUPOS[g2]||[]).map(function(eq){return h("option",{key:eq,value:eq},fl(eq)+" "+eq);})):h("div",{style:{fontSize:14,fontWeight:700,color:e2?c.ink:c.muted,padding:"6px 0"}},e2?fl(e2)+" "+e2:"Por decidir"))
+        var mt=matchTimes[i]||{};
+        return h("div",{key:i,style:{display:"flex",flexDirection:"column",gap:6,padding:"10px 0",borderBottom:"1px solid "+c.border}},
+          h("div",{style:{display:"flex",alignItems:"center",gap:8}},
+            h("div",{style:{flex:1,textAlign:"center"}},h("div",{style:{fontSize:10,color:c.muted,marginBottom:4,fontWeight:700}},t1?"3er":""+r1+"º "+g1),isAdmin?h("select",{style:inp,value:e1,onChange:function(e){upd(p1,e.target.value);}},h("option",{value:""},"– Elegir –"),(GRUPOS[g1]||[]).map(function(eq){return h("option",{key:eq,value:eq},fl(eq)+" "+eq);})):h("div",{style:{fontSize:14,fontWeight:700,color:e1?c.ink:c.muted,padding:"6px 0"}},e1?fl(e1)+" "+e1:"Por decidir")),
+            h("div",{style:{fontSize:14,fontWeight:800,color:c.muted,flexShrink:0}},"VS"),
+            h("div",{style:{flex:1,textAlign:"center"}},h("div",{style:{fontSize:10,color:c.muted,marginBottom:4,fontWeight:700}},t2?"3er":""+r2+"º "+g2),isAdmin?h("select",{style:inp,value:e2,onChange:function(e){upd(p2,e.target.value);}},h("option",{value:""},"– Elegir –"),(GRUPOS[g2]||[]).map(function(eq){return h("option",{key:eq,value:eq},fl(eq)+" "+eq);})):h("div",{style:{fontSize:14,fontWeight:700,color:e2?c.ink:c.muted,padding:"6px 0"}},e2?fl(e2)+" "+e2:"Por decidir"))
+          ),
+          isAdmin&&h("div",{style:{display:"flex",alignItems:"center",gap:6}},
+            h("span",{style:{fontSize:12,color:c.muted,flexShrink:0}},"📅"),
+            h("input",{type:"date",style:Object.assign({},smInp,{flex:1}),value:mt.date||"",onChange:function(e){setMatchTimes(function(prev){var n=Object.assign({},prev);n[i]=Object.assign({},n[i]||{},{date:e.target.value});return n;});}}),
+            h("input",{type:"time",style:Object.assign({},smInp,{width:78}),value:mt.time||"",onChange:function(e){setMatchTimes(function(prev){var n=Object.assign({},prev);n[i]=Object.assign({},n[i]||{},{time:e.target.value});return n;});}}),
+            mt.homeApi&&h("span",{style:{fontSize:10,color:c.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:90}},mt.homeApi," – ",mt.awayApi)
+          )
         );
       }),
       isAdmin&&h("button",{style:btn,onClick:function(){
-        var nuevos=OCTAVOS.map(function(pair,i){var e1=bracket[pair[0]];var e2=bracket[pair[1]];if(!e1||!e2)return null;return{id:"oct"+i,home:e1,away:e2,kickoff:null,phase:"octavos",locked:false,result:{home:"",away:""}};}).filter(Boolean);
+        var nuevos=OCTAVOS.map(function(pair,i){var e1=bracket[pair[0]];var e2=bracket[pair[1]];if(!e1||!e2)return null;var mt=matchTimes[i]||{};var kickoff=null;if(mt.date&&mt.time){var dp=mt.date.split("-").map(Number);var tp=mt.time.split(":").map(Number);kickoff=Date.UTC(dp[0],dp[1]-1,dp[2],tp[0],tp[1]);}return{id:"oct"+i,home:e1,away:e2,kickoff:kickoff,phase:"octavos",locked:false,result:{home:"",away:""}};}).filter(Boolean);
         if(!nuevos.length){toast2("Primero elige los equipos");return;}
         var ex=matches.filter(function(m){return m.phase==="octavos";}).map(function(m){return m.home+"_"+m.away;});
         var toAdd=nuevos.filter(function(m){return!ex.includes(m.home+"_"+m.away);});
