@@ -973,24 +973,51 @@ function App(){
   var syncResults=async function(silent){
     setSyncing(true);
     try{
-      var res=await fetch("https://v3.football.api-sports.io/fixtures?league=1&season=2026&status=FT",{headers:{"x-apisports-key":"95ea5f8bce0ce8bdeba48f077d4751e9"}});
+      var res=await fetch("https://v3.football.api-sports.io/fixtures?league=1&season=2026",{headers:{"x-apisports-key":"95ea5f8bce0ce8bdeba48f077d4751e9"}});
       var data=await res.json();var fixtures=data.response||[];
       if(data.errors&&(data.errors.requests||data.errors.rateLimit)){
         if(!silent)toast2("⚠️ Límite diario de la API alcanzado (100 llamadas). Prueba mañana.");
         setSyncing(false);return;
       }
-      if(!fixtures.length){if(!silent)toast2("Sin resultados aún");setSyncing(false);return;}
-      var updated=0;var nm=matches.slice();
+      if(!fixtures.length){if(!silent)toast2("Sin datos de la API aún");setSyncing(false);return;}
+      var updated=0;var added=0;var nm=matches.slice();
+      var GROUP_END=Date.UTC(2026,5,28,0,0);
       fixtures.forEach(function(fix){
-        var hR=fix.teams&&fix.teams.home&&fix.teams.home.name;var aR=fix.teams&&fix.teams.away&&fix.teams.away.name;
+        var hR=fix.teams&&fix.teams.home&&fix.teams.home.name;
+        var aR=fix.teams&&fix.teams.away&&fix.teams.away.name;
         var gh=fix.goals&&fix.goals.home;var ga=fix.goals&&fix.goals.away;
-        if(!hR||!aR||gh==null||ga==null)return;
+        var status=(fix.fixture&&fix.fixture.status&&fix.fixture.status.short)||"";
+        var kickoffMs=fix.fixture&&fix.fixture.date?new Date(fix.fixture.date).getTime():0;
+        if(!hR||!aR)return;
         var hE=mapName(hR);var aE=mapName(aR);
-        var idx=nm.findIndex(function(m){var mh=norm(m.home);var ma=norm(m.away);return(mh===norm(hR)||mh===norm(hE))&&(ma===norm(aR)||ma===norm(aE));});
-        if(idx!==-1&&nm[idx].result.home===""){nm[idx]=Object.assign({},nm[idx],{result:{home:String(gh),away:String(ga)}});updated++;}
+        // Actualizar resultados de partidos terminados
+        if(status==="FT"&&gh!=null&&ga!=null){
+          var idx=nm.findIndex(function(m){var mh=norm(m.home);var ma=norm(m.away);return(mh===norm(hR)||mh===norm(hE))&&(ma===norm(aR)||ma===norm(aE));});
+          if(idx!==-1&&nm[idx].result.home===""){nm[idx]=Object.assign({},nm[idx],{result:{home:String(gh),away:String(ga)}});updated++;}
+        }
+        // Auto-crear partidos eliminatorios con equipos conocidos
+        var r=((fix.league&&fix.league.round)||"").toLowerCase();
+        var isKO=kickoffMs>=GROUP_END&&!r.includes("group");
+        var teamsKnown=hR!=="TBD"&&aR!=="TBD"&&hE&&aE;
+        if(isKO&&teamsKnown){
+          var exists=nm.find(function(m){return norm(m.home)===norm(hE)&&norm(m.away)===norm(aE);});
+          if(!exists){
+            var phase="octavos";
+            if(r.includes("quarter")||r.includes("1/4"))phase="cuartos";
+            else if(r.includes("semi")||r.includes("1/2"))phase="semis";
+            else if(r.includes("final")||r.includes("3rd")||r.includes("bron"))phase="final";
+            nm.push({id:"ko_"+norm(hE)+"_"+norm(aE),home:hE,away:aE,kickoff:kickoffMs,phase:phase,locked:false,result:{home:"",away:""}});
+            added++;
+          }
+        }
       });
-      if(updated>0){setMatches(nm);DB.set(K.m,nm);if(!silent)toast2("✓ "+updated+" resultado(s) actualizados");}
-      else if(!silent)toast2("Sin cambios — ya están al día");
+      if(updated>0||added>0){setMatches(nm);DB.set(K.m,nm);}
+      if(!silent){
+        var parts=[];
+        if(updated>0)parts.push(updated+" resultado(s)");
+        if(added>0)parts.push(added+" partido(s) nuevo(s)");
+        if(parts.length)toast2("✓ "+parts.join(", "));else toast2("Sin cambios — ya están al día");
+      }else if(added>0){toast2("🗓️ "+added+" partido(s) eliminatorio(s) añadido(s)");}
     }catch(e){console.error(e);if(!silent)toast2("Error al conectar con la API");}
     setSyncing(false);
   };
