@@ -1,0 +1,16 @@
+{
+  "rules": {
+    "porra": {
+      ".read": true,
+      ".write": true
+    },
+    "pools": {
+      ".read": true,
+      ".write": true
+    },
+    "invite_codes": {
+      ".read": true,
+      ".write": true
+    }
+  }
+}
